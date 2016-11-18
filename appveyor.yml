@@ -1,32 +1,52 @@
-#Script provided by Thomas Feher
-#Not yet used (Sept 2016) for continuous integration by Audacity Team
-#but developers who clone audacity.git can adapt and use.
-#useful for Linux-only developers.
-#if you want to work on this, please talk with us on
-# https://lists.sourceforge.net/lists/listinfo/audacity-devel
-#build time is circa 50 mins.
-version: 2.1.2-{build}
-shallow_clone: true # reduce traffic
+version: 1.0.{build}
+image: Visual Studio 2013
+
+
+clone_depth: 1
+
+platform:
+    - x64
+    - Win32
+
+configuration:
+    - Unicode Release
+    - Unicode Debug
+
 install:
-    # install gettext tool (only used by target "locale", which is not built at
-    # the moment due to long duration
-    - nuget install Gettext.Tools
-    - set PATH=%PATH%;%AUDACITY_ROOT%\Gettext.Tools.0.19.7.001\tools\bin
-    # download wxWidgets
-    - git clone --branch v3.0.2 --depth 1 https://github.com/wxWidgets/wxWidgets.git %WXWIN%
-    # apply audacity patches
-    - xcopy %AUDACITY_ROOT%\win\wxWidgets_additions\wxWidgets-3.0.2 %WXWIN% /s /y /f
-    - xcopy %WXWIN%\include\wx\setup_redirect.h %WXWIN%\include\wx\setup.h* /f
-    # build wxWidgets
-    - msbuild %WXWIN%\build\msw\wx_vc12.sln /p:Configuration="DLL Release" /target:adv,base,core,html,net,qa,wxexpat,wxjpeg,wxpng,wxtiff,wxzlib /logger:"C:\Program Files\AppVeyor\BuildAgent\Appveyor.MSBuildLogger.dll"
-environment:
-    WXWIN: c:\wxWidgets-3.0.2
-    AUDACITY_ROOT: c:\projects\audacity
-# replace `build_script` with `build` and `configuration` when complete build
-# does not exceed a duration of 1 hour
-#build:
-    #project: win/audacity.sln
-#configuration:
-    #- Release
-build_script: # build all targets except of `help` and `locale`
-    msbuild win/audacity.sln /p:Configuration=Release /target:expat,filedialog,libflac++,libflac,libid3tag,libmad,libnyquist,libogg,libscorealign,libsndfile,libsoxr,libvamp,libvorbis,lv2,portaudio-v19,portmidi,portmixer,portsmf,sbsms,soundtouch,twolame,help,Audacity /logger:"C:\Program Files\AppVeyor\BuildAgent\Appveyor.MSBuildLogger.dll"
+    - if "%platform%"=="x64" set archi=amd64
+    - if "%platform%"=="Win32" set archi=x86
+    - call "C:\Program Files (x86)\Microsoft Visual Studio 12.0\VC\vcvarsall.bat" %archi%
+
+build:
+    verbosity: minimal
+
+build_script:
+    - cd c:\projects\notepad-plus-plus\scintilla\win32
+    - if "%configuration%"=="Unicode Debug" set scintilla_debug=DEBUG=1
+    - if "%configuration%"=="Unicode Release" set scintilla_debug=
+    - nmake NOBOOST=1 %scintilla_debug% -f scintilla.mak
+    - cd c:\projects\notepad-plus-plus\PowerEditor\visual.net\
+    - msbuild notepadPlus.vcxproj /p:configuration="%configuration%" /p:platform="%platform%"
+
+after_build:
+    - cd c:\projects\notepad-plus-plus\
+    - ps: >-
+        $nppFileName = "Notepad++.$env:PLATFORM.$env:CONFIGURATION.exe"
+
+        if ($env:PLATFORM -eq "x64" -and $env:CONFIGURATION -eq "Unicode Release") {
+            Push-AppveyorArtifact "PowerEditor\bin64\Notepad++.exe" -FileName "$nppFileName"
+        }
+
+        if ($env:PLATFORM -eq "x64" -and $env:CONFIGURATION -eq "Unicode Debug") {
+            Push-AppveyorArtifact "PowerEditor\visual.net\x64\Unicode Debug\Notepad++.exe" -FileName "$nppFileName"
+        }
+
+        if ($env:PLATFORM -eq "Win32" -and $env:CONFIGURATION -eq "Unicode Release") {
+            Push-AppveyorArtifact "PowerEditor\bin\Notepad++.exe" -FileName "$nppFileName"
+        }
+
+        if ($env:PLATFORM -eq "Win32" -and $env:CONFIGURATION -eq "Unicode Debug") {
+            Push-AppveyorArtifact "PowerEditor\visual.net\Unicode Debug\Notepad++.exe" -FileName "$nppFileName"
+        }
+
+        Push-AppveyorArtifact "scintilla\bin\SciLexer.dll" -FileName "SciLexer.$env:PLATFORM.$env:CONFIGURATION.dll"
